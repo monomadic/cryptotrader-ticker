@@ -1,0 +1,15 @@
+[package]
+name = "cryptotrader-ticker"
+version = "0.1.0"
+authors = ["Rob Saunders <rob@wearebrandnew.com>"]
+edition = "2018"
+
+[dependencies]
+# binance_api = { package = "binance", path = "../_forks/binance-rs" }
+binance = { path = "../_forks/binance-rs" }
+cryptotrader = { path = "../cryptotrader-core" }
+colored = "1.7"
+crossbeam-channel = "0.3"
+crossbeam-utils = "0.5"
+log = "0.4.5"
+simple_logger = "1.0.1"
