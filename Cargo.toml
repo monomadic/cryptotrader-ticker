@@ -6,8 +6,10 @@ edition = "2018"
 
 [dependencies]
 # binance_api = { package = "binance", path = "../_forks/binance-rs" }
-binance = { path = "../_forks/binance-rs" }
-cryptotrader = { path = "../cryptotrader-core" }
+# binance = { path = "../_forks/binance-rs" }
+binance = { git = "https://github.com/robsaunders/binance-rs" }
+# cryptotrader = { path = "../cryptotrader-core" }
+cryptotrader = { git = "https://github.com/robsaunders/cryptotrader-core" }
 colored = "1.7"
 crossbeam-channel = "0.3"
 crossbeam-utils = "0.5"
