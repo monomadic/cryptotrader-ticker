@@ -1,0 +1,6 @@
+[exchange.binance."ATOM"]
+    base = "BTC"
+    entry_price = 1.0
+
+[exchange.binance."MATIC"]
+    base = "BTC"
