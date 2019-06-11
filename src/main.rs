@@ -4,24 +4,22 @@ use binance::websockets::*;
 use colored::*;
 use cryptotrader::exchanges::binance::BinanceAPI;
 use cryptotrader::exchanges::ExchangeAPI;
-use cryptotrader::models::group_and_average_trades_by_trade_type;
-use cryptotrader::models::AssetType;
+use cryptotrader::models::{group_and_average_trades_by_trade_type, PriceUtils, TradeUtils};
 use std::collections::HashMap;
 use std::sync::mpsc;
 use std::thread;
 
-fn get_symbols_for_aggtrades() -> Vec<String> {
-    let conf = cryptotrader::config::read().unwrap();
-    let keys = &conf.exchange["binance"];
-    let client = BinanceAPI::connect(&keys.api_key, &keys.secret_key);
+mod config;
 
-    let assets = client.balances().unwrap();
-
-    assets
+fn get_symbols_for_aggtrades() -> Vec<(String, config::Pair)> {
+    let conf = config::read().unwrap();
+    let binance_assets: Vec<(String, config::Pair)> = conf.exchange["binance"]
+        .clone()
         .into_iter()
-        .filter(|a| a.asset_type() == AssetType::Altcoin && a.amount >= 10.0)
-        .map(|a| format!("{}", a.symbol.to_lowercase()))
-        .collect()
+        .map({ |(symbol, pair)| (format!("{}", symbol.to_lowercase()), pair) })
+        .collect();
+
+    binance_assets
 }
 
 fn main() {
@@ -51,7 +49,7 @@ fn main() {
 
             // RUN WS
 
-            let agg_trade: String = format!("{}@aggTrade", pair);
+            let agg_trade: String = format!("{}@aggTrade", pair.to_lowercase());
             let mut web_socket: WebSockets = WebSockets::new();
 
             println!("attaching websocket handler to {}", agg_trade);
@@ -71,45 +69,64 @@ fn main() {
         position_size: f64,
     }
 
-    let mut prices: HashMap<String, Price> = HashMap::new();
+    let mut asset_map: HashMap<String, Price> = HashMap::new();
 
     let assets = get_symbols_for_aggtrades();
 
-    let conf = cryptotrader::config::read().unwrap();
-    let keys = &conf.exchange["binance"];
-    let client = BinanceAPI::connect(&keys.api_key, &keys.secret_key);
-    let pairs = client.all_pairs().expect("pairs to unwrap");
-    // let mut btcusd_pair = client.btc_pair(pairs.clone());
+    // let conf = cryptotrader::config::read().unwrap();
+    // let keys = &conf.exchange["binance"];
+    // let client = BinanceAPI::new(&keys.api_key, &keys.secret_key);
+    let client = BinanceAPI::new();
+    let prices = client.all_prices().expect("pairs to unwrap");
+    let btc_price = prices
+        .price_for(client.btc_usd_pair())
+        .expect("btc price not found");
 
-    if let Some(btc_price) = client.btc_price(&pairs) {
-        prices.insert(
-            "BTCUSDT".to_string(),
+    // insert btc as an update pair
+    // asset_map.insert(
+    //     "BTCUSDT".to_string(),
+    //     Price {
+    //         entry_price: btc_price,
+    //         current_price: btc_price,
+    //         position_size: 0.0,
+    //     },
+    // );
+    // attach_ws("btcusdt".to_string(), tx.clone());
+
+    for (asset, pair) in assets {
+        println!("attempting to fetch trades for {}...", asset);
+        attach_ws(format!("{}{}", asset, pair.base), tx.clone());
+        let current_price = prices
+            .price_of(&asset.to_uppercase(), &pair.base)
+            .expect(&format!("price to exist: {} {}", asset, pair.base));
+        asset_map.insert(
+            format!("{}{}", asset, pair.base).to_uppercase(),
             Price {
-                entry_price: btc_price,
-                current_price: btc_price,
-                position_size: 0.0, // fix this later
+                entry_price: pair.entry_price.unwrap_or(current_price),
+                current_price: current_price,
+                position_size: 0.0,
             },
         );
-        attach_ws("btcusdt".to_string(), tx.clone());
-    }
 
-    for asset in assets {
-        println!("attempting to fetch trades for {}...", asset);
-        let btc_pair = format!("{}BTC", asset.to_uppercase());
-
-        if let Ok(trades) = client.trades_for_symbol(&asset, pairs.clone()) {
-            if let Some(trade) = group_and_average_trades_by_trade_type(trades).last() {
-                prices.insert(
-                    btc_pair,
-                    Price {
-                        entry_price: trade.price,
-                        current_price: trade.price,
-                        position_size: trade.qty,
-                    },
-                );
-                attach_ws(format!("{}btc", asset), tx.clone());
-            }
-        }
+        // if let Ok(trades) = client.trades_for_pairs(prices.filter_by(&asset).to_pairs()) {
+        //     if let Some(trade) = group_and_average_trades_by_trade_type(trades)
+        //         .buys_only()
+        //         .last()
+        //     {
+        //         asset_map.insert(
+        //             format!("{}BTC", asset.to_uppercase()),
+        //             Price {
+        //                 entry_price: trade.sale_price,
+        //                 current_price: prices.price_for(trade.pair.clone()).expect(&format!(
+        //                     "no current price for {}",
+        //                     trade.pair.symbol.clone()
+        //                 )),
+        //                 position_size: trade.qty,
+        //             },
+        //         );
+        //         attach_ws(format!("{}", asset), tx.clone());
+        //     }
+        // }
     }
 
     println!("listening...");
@@ -118,10 +135,13 @@ fn main() {
         if let Ok(r) = rx.recv() {
             let (symbol, price) = r;
 
-            if let Some(new_price) = prices.get_mut(&symbol) {
+            if let Some(new_price) = asset_map.get_mut(&symbol) {
                 new_price.current_price = price;
             } else {
-                println!("ERROR: COULD NOT WRITE {} {:?}", symbol, prices);
+                println!(
+                    "ERROR: COULD NOT WRITE {} {:?} {:?}",
+                    symbol, prices, asset_map
+                );
             }
 
             fn display_ticker(prices: HashMap<String, Price>) {
@@ -141,19 +161,10 @@ fn main() {
                     .join(" :: ");
 
                 cls();
-                print!(
-                    "{}\n{} ${:.2}",
-                    p,
-                    "BTC PRICE".blue(),
-                    prices
-                        .clone()
-                        .get("BTCUSDT")
-                        .map(|p| p.current_price)
-                        .unwrap_or(0.0)
-                );
+                println!("{}", p);
             }
 
-            display_ticker(prices.clone());
+            display_ticker(asset_map.clone());
         }
     }
 }
@@ -177,7 +188,7 @@ pub fn cls() {
     use std::process::Command;
 
     if let Ok(output) = Command::new("clear").output() {
-        println!("{}", String::from_utf8_lossy(&output.stdout));
+        print!("{}", String::from_utf8_lossy(&output.stdout));
     }
 }
 
