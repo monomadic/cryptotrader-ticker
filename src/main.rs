@@ -4,19 +4,39 @@ use binance::websockets::*;
 use colored::*;
 use cryptotrader::exchanges::binance::BinanceAPI;
 use cryptotrader::exchanges::ExchangeAPI;
-use cryptotrader::models::{group_and_average_trades_by_trade_type, PriceUtils, TradeUtils};
+use cryptotrader::models::PriceUtils;
 use std::collections::HashMap;
 use std::sync::mpsc;
 use std::thread;
 
 mod config;
 
-fn get_symbols_for_aggtrades() -> Vec<(String, config::Pair)> {
+use config::*;
+
+fn split_market(mapentry: (String, PairListing)) -> Pair {
+    let (market, pairlist) = mapentry;
+    let mut splitmarket = market.split('_');
+    let symbol = splitmarket.next().unwrap();
+    let base = splitmarket.next().unwrap();
+
+    match pairlist {
+        PairListing::Simple(entry) => Pair {
+            base: base.to_string(),
+            symbol: symbol.to_string(),
+            entry: entry,
+        },
+        PairListing::Detailed(pair) => pair,
+    }
+}
+
+fn get_symbols_for_aggtrades() -> Vec<config::Pair> {
     let conf = config::read().unwrap();
-    let binance_assets: Vec<(String, config::Pair)> = conf.exchange["binance"]
-        .clone()
+    // println!("config loaded: {:?}", conf.clone());
+    let binance_assets: Vec<config::Pair> = conf
+        .binance
+        .unwrap()
         .into_iter()
-        .map({ |(symbol, pair)| (format!("{}", symbol.to_lowercase()), pair) })
+        .map(split_market)
         .collect();
 
     binance_assets
@@ -78,9 +98,9 @@ fn main() {
     // let client = BinanceAPI::new(&keys.api_key, &keys.secret_key);
     let client = BinanceAPI::new();
     let prices = client.all_prices().expect("pairs to unwrap");
-    let btc_price = prices
-        .price_for(client.btc_usd_pair())
-        .expect("btc price not found");
+    // let _btc_price = prices
+    //     .price_for(client.btc_usd_pair())
+    //     .expect("btc price not found");
 
     // insert btc as an update pair
     // asset_map.insert(
@@ -93,40 +113,20 @@ fn main() {
     // );
     // attach_ws("btcusdt".to_string(), tx.clone());
 
-    for (asset, pair) in assets {
-        println!("attempting to fetch trades for {}...", asset);
-        attach_ws(format!("{}{}", asset, pair.base), tx.clone());
+    for pair in assets {
+        println!("attempting to fetch trades for {}...", pair.base);
+        attach_ws(format!("{}{}", pair.symbol, pair.base), tx.clone());
         let current_price = prices
-            .price_of(&asset.to_uppercase(), &pair.base)
-            .expect(&format!("price to exist: {} {}", asset, pair.base));
+            .price_of(&pair.symbol.to_uppercase(), &pair.base)
+            .expect(&format!("price to exist: {} {}", pair.symbol, pair.base));
         asset_map.insert(
-            format!("{}{}", asset, pair.base).to_uppercase(),
+            format!("{}{}", pair.symbol, pair.base).to_uppercase(),
             Price {
-                entry_price: pair.entry_price.unwrap_or(current_price),
+                entry_price: pair.entry,
                 current_price: current_price,
                 position_size: 0.0,
             },
         );
-
-        // if let Ok(trades) = client.trades_for_pairs(prices.filter_by(&asset).to_pairs()) {
-        //     if let Some(trade) = group_and_average_trades_by_trade_type(trades)
-        //         .buys_only()
-        //         .last()
-        //     {
-        //         asset_map.insert(
-        //             format!("{}BTC", asset.to_uppercase()),
-        //             Price {
-        //                 entry_price: trade.sale_price,
-        //                 current_price: prices.price_for(trade.pair.clone()).expect(&format!(
-        //                     "no current price for {}",
-        //                     trade.pair.symbol.clone()
-        //                 )),
-        //                 position_size: trade.qty,
-        //             },
-        //         );
-        //         attach_ws(format!("{}", asset), tx.clone());
-        //     }
-        // }
     }
 
     println!("listening...");

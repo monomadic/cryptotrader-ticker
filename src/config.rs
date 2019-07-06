@@ -6,15 +6,24 @@ use serde_derive::Deserialize;
 use std::collections::BTreeMap;
 use toml;
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+pub enum PairListing {
+    Simple(f64),
+    Detailed(Pair),
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct Config {
-    pub exchange: BTreeMap<String, BTreeMap<String, Pair>>,
+    // pub exchange: BTreeMap<String, BTreeMap<String, Pair>>,
+    pub binance: Option<BTreeMap<String, PairListing>>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Pair {
     pub base: String,
-    pub entry_price: Option<f64>,
+    pub symbol: String,
+    pub entry: f64,
 }
 
 // converted a lot of this to use unwraps because... well.. rust gets so exhausting
