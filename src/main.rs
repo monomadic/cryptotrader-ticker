@@ -29,9 +29,9 @@ fn split_market(mapentry: (String, PairListing)) -> Pair {
     }
 }
 
-fn get_symbols_for_aggtrades() -> Vec<config::Pair> {
-    let conf = config::read().unwrap();
-    // println!("config loaded: {:?}", conf.clone());
+fn get_symbols_for_aggtrades() -> Result<Vec<config::Pair>, String> {
+    let conf = config::read()?;
+    println!("config loaded: {:?}", conf.clone());
     let binance_assets: Vec<config::Pair> = conf
         .binance
         .unwrap()
@@ -39,10 +39,10 @@ fn get_symbols_for_aggtrades() -> Vec<config::Pair> {
         .map(split_market)
         .collect();
 
-    binance_assets
+    Ok(binance_assets)
 }
 
-fn main() {
+fn main() -> Result<(), String> {
     let (tx, rx) = mpsc::channel();
 
     fn attach_ws(pair: String, tx: mpsc::Sender<(String, f64)>) {
@@ -91,7 +91,7 @@ fn main() {
 
     let mut asset_map: HashMap<String, Price> = HashMap::new();
 
-    let assets = get_symbols_for_aggtrades();
+    let assets = get_symbols_for_aggtrades()?;
 
     // let conf = cryptotrader::config::read().unwrap();
     // let keys = &conf.exchange["binance"];
