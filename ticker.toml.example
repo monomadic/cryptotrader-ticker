@@ -1,6 +1,3 @@
-[exchange.binance."ATOM"]
-    base = "BTC"
-    entry_price = 1.0
-
-[exchange.binance."MATIC"]
-    base = "BTC"
+[binance]
+STORJ_BTC = 0.00002492
+LTC_USDT = 118.59
