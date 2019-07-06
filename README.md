@@ -1,6 +1,8 @@
 # Crypticker
 
-Simple tool for monitoring price movements of your assets in realtime with websockets.
+Simple tool for monitoring price movements of your assets in realtime with websockets. I tend to have it across the top of the screen using iTerm2 under macos like so:
+
+<img src="screenshot.png" alt="go-staticgen" height="150">
 
 ## Usage
 Create a ~/.crypto/ticker.toml file with a configuration like so:
